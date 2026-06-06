@@ -1,0 +1,275 @@
+/* ============================================================
+   Snip Snap — layout.css
+   Top-nav shell layout
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;500;600;700&display=swap');
+
+/* ── Reset & Root ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Core palette */
+  --bg-void:       #f0f1f3;
+  --bg-deep:       #e8eaed;
+  --bg-panel:      #f4f5f7;
+  --bg-surface:    #ffffff;
+  --bg-elevated:   #ffffff;
+  --bg-hover:      #e2e5ea;
+
+  /* Borders */
+  --border-subtle: rgba(0,0,0,0.07);
+  --border-mid:    rgba(0,0,0,0.11);
+  --border-strong: rgba(0,0,0,0.18);
+
+  /* Accent */
+  --accent-orange:  #e05c10;
+  --accent-orange2: #c44d08;
+  --accent-blue:    #1a72e8;
+  --accent-red:     #d93025;
+  --accent-cyan:    #0b8f8f;
+  --accent-green:   #1a9955;
+
+  /* Emotion tags */
+  --tag-calm:       #0e9e78;
+  --tag-intense:    #d93025;
+  --tag-neutral:    #6b7a8d;
+  --tag-melancholy: #7c52c8;
+
+  /* Text */
+  --text-primary:   #1a1d23;
+  --text-secondary: #4a5568;
+  --text-muted:     #8a96a8;
+  --text-tiny:      #b0bac8;
+
+  /* Timeline track colors */
+  --track-v1-start: #1a72e8;
+  --track-v1-end:   #1565d0;
+  --track-v2-start: #d93025;
+  --track-v2-end:   #c12318;
+  --track-a1:       rgba(180,120,40,0.28);
+  --track-emo:      rgba(14,158,120,0.45);
+  --track-emo2:     rgba(217,48,37,0.45);
+
+  /* Typography */
+  --font-ui:    'Syne', sans-serif;
+  --font-mono:  'JetBrains Mono', monospace;
+
+  /* Misc */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --shadow-panel: 0 1px 6px rgba(0,0,0,0.10);
+  --shadow-float: 0 4px 20px rgba(0,0,0,0.14);
+
+  --transition-fast: 120ms ease;
+  --transition-mid:  200ms ease;
+
+  /* Top nav height */
+  --topnav-h: 48px;
+}
+
+/* ── Base ─────────────────────────────────────────────────── */
+html, body {
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button { font-family: var(--font-ui); cursor: pointer; border: none; background: none; color: inherit; }
+input  { font-family: var(--font-mono); }
+
+/* ============================================================
+   APP SHELL — top nav + content
+   ============================================================ */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ── Top Nav Bar ──────────────────────────────────────────── */
+.top-nav {
+  display: flex;
+  align-items: center;
+  height: var(--topnav-h);
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 16px;
+  gap: 0;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Brand */
+.brand {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin-right: 28px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.brand .brand-icon {
+  width: 22px; height: 22px;
+  background: var(--accent-orange);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+}
+.brand .brand-icon svg { color: #fff; }
+.brand span { color: var(--accent-orange); }
+
+/* Nav items (former sidebar icons — now horizontal with labels) */
+.nav-items {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+}
+.nav-item svg { flex-shrink: 0; }
+.nav-item:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.nav-item.active {
+  color: var(--accent-orange);
+  background: rgba(224,92,16,0.09);
+}
+
+/* Divider between nav groups */
+.nav-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-mid);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+/* Right side: search + icons */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  width: 200px;
+  transition: border-color var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.search-bar:focus-within { border-color: var(--accent-blue); }
+.search-bar svg { color: var(--text-muted); flex-shrink: 0; }
+.search-bar input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: 100%;
+}
+.search-bar input::placeholder { color: var(--text-muted); }
+
+.icon-btn {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/* Sync button */
+.nav-sync {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  cursor: pointer;
+  border: 1px solid var(--border-mid);
+}
+.nav-sync:hover { color: var(--text-secondary); background: var(--bg-hover); }
+
+/* Export button */
+.nav-export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-orange);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), transform 60ms;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nav-export:hover { background: var(--accent-orange2); }
+.nav-export:active { transform: scale(0.97); }
+
+/* ── Page content area ────────────────────────────────────── */
+.page-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Shared panel helpers ─────────────────────────────────── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.panel-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
