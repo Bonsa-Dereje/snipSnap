@@ -29,6 +29,15 @@ fn normalize_path(raw: &str) -> PathBuf {
     PathBuf::from(decoded)
 }
 
+/// Returns the app data directory base: ~/Documents/donalds/projects/<project_name>
+fn project_base(project_name: &str) -> PathBuf {
+    dirs::document_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("donalds")
+        .join("projects")
+        .join(project_name)
+}
+
 #[tauri::command]
 fn import_project_files(
     srt_path: String,
@@ -36,11 +45,7 @@ fn import_project_files(
     project_name: String,
 ) {
     thread::spawn(move || {
-        let base = dirs::document_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("donalds")
-            .join("projects")
-            .join(&project_name);
+        let base = project_base(&project_name);
 
         // ── Copy SRT ──────────────────────────────────────────
         if !srt_path.is_empty() {
@@ -82,37 +87,33 @@ fn import_project_files(
     });
 }
 
-/// Called when the user picks a file via the Browse button.
-/// The frontend reads the file bytes (FileReader) and passes them here,
-/// because Tauri v2 webviews cannot expose real OS paths from <input type="file">.
+/// Called when the user picks or drops a file.
+/// The frontend reads the raw bytes via FileReader and passes them here,
+/// because Tauri v2 webviews never expose real OS paths from <input type="file">
+/// or drag-and-drop — only the filename is available.
+///
+/// Returns the final destination path so the frontend can display it.
 #[tauri::command]
 fn import_file_bytes(
     file_kind:    String,   // "srt" or "video"
     file_name:    String,
     bytes:        Vec<u8>,
     project_name: String,
-) {
-    thread::spawn(move || {
-        let base = dirs::document_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("donalds")
-            .join("projects")
-            .join(&project_name);
+) -> Result<String, String> {
+    let base = project_base(&project_name);
+    let sub_dir = if file_kind == "srt" { "srt" } else { "video" };
+    let dest_dir = base.join(sub_dir);
 
-        let sub_dir = if file_kind == "srt" { "srt" } else { "video" };
-        let dest_dir = base.join(sub_dir);
+    fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("Could not create {} dir: {e}", sub_dir))?;
 
-        match fs::create_dir_all(&dest_dir) {
-            Ok(_) => {
-                let dest = dest_dir.join(&file_name);
-                match fs::write(&dest, &bytes) {
-                    Ok(_)  => println!("[snipSnap] {} written → {}", file_kind, dest.display()),
-                    Err(e) => eprintln!("[snipSnap] {} write failed: {e}", file_kind),
-                }
-            }
-            Err(e) => eprintln!("[snipSnap] Could not create {} dir: {e}", sub_dir),
-        }
-    });
+    let dest = dest_dir.join(&file_name);
+    fs::write(&dest, &bytes)
+        .map_err(|e| format!("{} write failed: {e}", file_kind))?;
+
+    let dest_str = dest.to_string_lossy().into_owned();
+    println!("[snipSnap] {} saved → {}", file_kind, dest_str);
+    Ok(dest_str)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

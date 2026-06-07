@@ -18,6 +18,10 @@ let srtError        = '';
 let videoError      = '';
 let projectTitle    = 'Untitled';
 
+// Saved destination paths returned by Rust (real OS paths)
+let srtSavedPath   = '';   // e.g. C:\Users\...\projects\Untitled\srt\foo.srt
+let videoSavedPath = '';
+
 const sortOptions = ['Last Modified', 'Name', 'Duration', 'Created'];
 const ACCEPTED_VIDEO_EXTS = ['.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'];
 
@@ -109,6 +113,30 @@ const tagColorMap = {
   red:    { bg: 'rgba(217,48,37,0.10)',  color: '#d93025' },
 };
 
+// ── File → bytes helper ────────────────────────────────────
+/**
+ * Read a File object into a Uint8Array via FileReader.
+ * This is the only reliable way to get file content in Tauri v2,
+ * since the webview never exposes real OS paths.
+ */
+function readFileBytes(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Strip the filename from a full path to get the directory.
+ * Works for both / and \ separators.
+ */
+function dirOf(fullPath) {
+  const last = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+  return last > 0 ? fullPath.slice(0, last) : fullPath;
+}
+
 // ── Modal helpers ──────────────────────────────────────────
 function openModal() {
   showModal       = true;
@@ -120,6 +148,8 @@ function openModal() {
   isDragOver      = false;
   isDragOverVideo = false;
   projectTitle    = 'Untitled';
+  srtSavedPath    = '';
+  videoSavedPath  = '';
 }
 
 function closeModal() {
@@ -130,6 +160,8 @@ function closeModal() {
   videoError      = '';
   isDragOver      = false;
   isDragOverVideo = false;
+  srtSavedPath    = '';
+  videoSavedPath  = '';
 }
 
 // ── SRT helpers ────────────────────────────────────────────
@@ -171,13 +203,22 @@ function handleVideoInput(e)     { validateAndSetVideo(e.target.files[0]); }
 async function confirmSrt() {
   if (!uploadedSrt) return;
 
-  // Kick off background copy of SRT only — video not picked yet
-  const srtPath = uploadedSrt.path ?? uploadedSrt.name;
-  invoke('import_project_files', {
-    srtPath,
-    videoPath:   '',
-    projectName: projectTitle || 'Untitled',
-  }).catch(e => console.error('[snipSnap] import_project_files error:', e));
+  try {
+    const bytes = await readFileBytes(uploadedSrt);
+    // invoke returns the saved destination path from Rust
+    const savedPath = await invoke('import_file_bytes', {
+      fileKind:    'srt',
+      fileName:    uploadedSrt.name,
+      bytes:       Array.from(bytes),   // Tauri serialises Vec<u8> from JS number[]
+      projectName: projectTitle || 'Untitled',
+    });
+    srtSavedPath = savedPath;
+    console.log('[snipSnap] SRT saved to:', savedPath);
+  } catch (e) {
+    console.error('[snipSnap] SRT import error:', e);
+    srtError = 'Failed to save file: ' + e;
+    return;
+  }
 
   modalStep = 2;
 }
@@ -185,19 +226,30 @@ async function confirmSrt() {
 async function confirmVideo() {
   if (!uploadedVideo) return;
 
-  // Copy video (SRT was already copied in step 1, skip re-copy by leaving srtPath empty)
-  const videoPath = uploadedVideo.path ?? uploadedVideo.name;
-  invoke('import_project_files', {
-    srtPath:     '',
-    videoPath,
-    projectName: projectTitle || 'Untitled',
-  }).catch(e => console.error('[snipSnap] import_project_files error:', e));
+  try {
+    const bytes = await readFileBytes(uploadedVideo);
+    const savedPath = await invoke('import_file_bytes', {
+      fileKind:    'video',
+      fileName:    uploadedVideo.name,
+      bytes:       Array.from(bytes),
+      projectName: projectTitle || 'Untitled',
+    });
+    videoSavedPath = savedPath;
+    console.log('[snipSnap] Video saved to:', savedPath);
+  } catch (e) {
+    console.error('[snipSnap] Video import error:', e);
+    videoError = 'Failed to save file: ' + e;
+    return;
+  }
 
-  closeModal();
-  goto('/timeline');
+  modalStep = 3;
 }
 
 function skipVideo() {
+  modalStep = 3;
+}
+
+function proceedToTimeline() {
   closeModal();
   goto('/timeline');
 }
@@ -389,21 +441,31 @@ function formatBytes(bytes) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-          {:else}
+          {:else if modalStep === 2}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+          {:else}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 11 12 14 22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
             </svg>
           {/if}
         </div>
         <div>
           <h2 class="modal-title" id="modal-title">
-            {modalStep === 1 ? 'New Project' : 'Add Episode Video'}
+            {#if modalStep === 1}New Project
+            {:else if modalStep === 2}Add Episode Video
+            {:else}Project Summary
+            {/if}
           </h2>
           <p class="modal-subtitle">
             {#if modalStep === 1}
               Step 1 of 2 — Import a subtitle file to get started
-            {:else}
+            {:else if modalStep === 2}
               Step 2 of 2 — Drop your source episode or movie file
+            {:else}
+              Files saved — ready to open the timeline
             {/if}
           </p>
         </div>
@@ -422,6 +484,7 @@ function formatBytes(bytes) {
       </div>
     </div>
 
+    <!-- ── Step 1: SRT ── -->
     {#if modalStep === 1}
       <div class="modal-body">
         <div class="field-group">
@@ -520,6 +583,7 @@ function formatBytes(bytes) {
       </div>
     {/if}
 
+    <!-- ── Step 2: Video ── -->
     {#if modalStep === 2}
       <div class="modal-body">
         <div
@@ -608,13 +672,206 @@ function formatBytes(bytes) {
       </div>
     {/if}
 
+    <!-- ── Step 3: Summary ── -->
+    {#if modalStep === 3}
+      <div class="modal-body">
+        <div class="review-project-name">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>{projectTitle || 'Untitled'}</span>
+        </div>
+
+        <div class="review-rows">
+
+          <!-- SRT row — shows the real saved path from Rust -->
+          <div class="review-row">
+            <div class="review-row-icon srt-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div class="review-row-body">
+              <div class="review-row-label">Subtitle File</div>
+              <div class="review-row-filename">{uploadedSrt?.name ?? '—'}</div>
+              {#if srtSavedPath}
+                <div class="review-row-dir">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  <span class="dir-path">{dirOf(srtSavedPath)}</span>
+                </div>
+              {/if}
+            </div>
+            <div class="review-row-badge review-badge-srt">SRT</div>
+          </div>
+
+          <!-- Video row — shows the real saved path from Rust -->
+          <div class="review-row {!uploadedVideo ? 'review-row-skipped' : ''}">
+            <div class="review-row-icon video-icon-rev">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+              </svg>
+            </div>
+            <div class="review-row-body">
+              <div class="review-row-label">Video File</div>
+              <div class="review-row-filename">{uploadedVideo?.name ?? 'Not provided — can be added later'}</div>
+              {#if videoSavedPath}
+                <div class="review-row-dir">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  <span class="dir-path">{dirOf(videoSavedPath)}</span>
+                </div>
+              {/if}
+            </div>
+            {#if uploadedVideo}
+              <div class="review-row-badge review-badge-video">VIDEO</div>
+            {:else}
+              <div class="review-row-badge review-badge-skip">SKIP</div>
+            {/if}
+          </div>
+
+        </div>
+
+        <div class="review-dest-note">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          Project folder: <strong>~/Documents/donalds/projects/{projectTitle || 'Untitled'}/</strong>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-cancel" on:click={closeModal}>Cancel</button>
+        <button class="btn-create" on:click={proceedToTimeline}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+          Open Timeline
+        </button>
+      </div>
+    {/if}
+
   </div>
 {/if}
 
-
-
-
 <style>
+/* ── Review step styles ──────────────────────────────────── */
+.review-project-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #e8eaed);
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.review-project-name svg { opacity: 0.5; flex-shrink: 0; }
+
+.review-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.review-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: opacity 0.15s;
+}
+.review-row-skipped { opacity: 0.55; }
+
+.review-row-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.srt-icon      { background: rgba(26,114,232,0.12); color: #5a9ff5; border: 1px solid rgba(26,114,232,0.18); }
+.video-icon-rev { background: rgba(124,82,200,0.12); color: #a57fde; border: 1px solid rgba(124,82,200,0.18); }
+
+.review-row-body { flex: 1; min-width: 0; }
+.review-row-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, rgba(232,234,237,0.4));
+  margin-bottom: 3px;
+}
+.review-row-filename {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary, #e8eaed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 5px;
+}
+.review-row-dir {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted, rgba(232,234,237,0.4));
+}
+.review-row-dir svg { flex-shrink: 0; opacity: 0.6; }
+.dir-path {
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted, rgba(232,234,237,0.45));
+}
+
+.review-row-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 5px;
+  padding: 3px 7px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.review-badge-srt   { background: rgba(26,114,232,0.12); color: #5a9ff5; border: 1px solid rgba(26,114,232,0.2); }
+.review-badge-video { background: rgba(124,82,200,0.12); color: #a57fde; border: 1px solid rgba(124,82,200,0.2); }
+.review-badge-skip  { background: rgba(255,255,255,0.05); color: rgba(232,234,237,0.35); border: 1px solid rgba(255,255,255,0.08); }
+
+.review-dest-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted, rgba(232,234,237,0.4));
+  padding: 9px 12px;
+  background: var(--surface-2, rgba(255,255,255,0.03));
+  border: 1px solid var(--border, rgba(255,255,255,0.06));
+  border-radius: 7px;
+}
+.review-dest-note svg { opacity: 0.5; flex-shrink: 0; }
+.review-dest-note strong { color: var(--text-secondary, rgba(232,234,237,0.65)); font-weight: 500; }
+
+
+
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;500;600;700&display=swap');
 
 .projects-page {
