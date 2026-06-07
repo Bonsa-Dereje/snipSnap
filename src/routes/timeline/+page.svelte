@@ -1,11 +1,19 @@
 <script>
+  import { invoke } from '@tauri-apps/api/core';
   import './timeline.css';
 
   // ── State ─────────────────────────────────────────────────
   let isPlaying = false;
   let currentTime = '00:04:15:12';
   let totalTime   = '00:12:44:00';
-  let zoomLevel   = 55; // percent for slider
+  let zoomLevel   = 55;
+
+  // ── Import handler ─────────────────────────────────────────
+  async function handleImport(projectName, srtPath, mediaPath) {
+    await invoke('import_files', {
+      req: { project_name: projectName, srt_path: srtPath, media_path: mediaPath }
+    });
+  }
 
   const captions = [
     {
