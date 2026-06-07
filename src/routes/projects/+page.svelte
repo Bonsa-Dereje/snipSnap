@@ -224,6 +224,7 @@ async function confirmSrt() {
 }
 
 async function confirmVideo() {
+ /*
   if (!uploadedVideo) return;
 
   try {
@@ -241,6 +242,7 @@ async function confirmVideo() {
     videoError = 'Failed to save file: ' + e;
     return;
   }
+    */
 
   modalStep = 3;
 }
